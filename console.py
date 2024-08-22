@@ -16,7 +16,6 @@ from models.state import State
 from models.city import City
 
 
-
 def split_curly_braces(e_arg):
     """
     Splits the curly braces for the update method
@@ -31,7 +30,7 @@ def split_curly_braces(e_arg):
         try:
             arg_dict = ast.literal_eval("{" + str_data + "}")
         except Exception:
-            print("**  invalid dictionary format **")
+            print("** invalid dictionary format **")
             return
         return id, arg_dict
     else:
@@ -51,13 +50,13 @@ def split_curly_braces(e_arg):
                 return id, attr_name
             return f"{id}", f"{attr_name} {attr_value}"
 
+
 class HBNBCommand(cmd.Cmd):
     """
     HBNBCommand console class
     """
     prompt = "(hbnb) "
-    valid_classes = ["BaseModel", "User", "Amenity",
-                     "Place", "Review", "State", "City"]
+    valid_classes = ["BaseModel", "User", "Amenity", "Place", "Review", "State", "City"]
 
     def emptyline(self):
         """
@@ -76,48 +75,44 @@ class HBNBCommand(cmd.Cmd):
         Quit command to exit the program.
         """
         return True
-        
 
     def do_create(self, arg):
         """
         Create a new instance of BaseModel and save it to the JSON file.
-        Usage: create <class_name>
+        Usage: create <class_name> <key1=value1> <key2=value2> ...
         """
         try:
-            class_name = arg.split(" ")[0]
-            if len(class_name) == 0:
+            if not arg:
                 print("** class name missing **")
                 return
-            if class_name and class_name not in self.valid_classes:
+            
+            commands = shlex.split(arg)
+            class_name = commands[0]
+
+            if class_name not in self.valid_classes:
                 print("** class doesn't exist **")
                 return
 
             kwargs = {}
-            commands = arg.split(" ")
-            for i in range(1, len(commands)):
-                
-                key = commands[i].split("=")[0]
-                value = commands[i].split("=")[1]
-                #key, value = tuple(commands[i].split("="))
-                if value.startswith('"'):
+            for command in commands[1:]:
+                key, value = command.split("=")
+                if value.startswith('"') and value.endswith('"'):
                     value = value.strip('"').replace("_", " ")
                 else:
                     try:
-                        value = eval(value)
-                    except (SyntaxError, NameError):
+                        value = ast.literal_eval(value)
+                    except (SyntaxError, ValueError):
                         continue
                 kwargs[key] = value
 
-            if kwargs == {}:
-                new_instance = eval(class_name)()
-            else:
-                new_instance = eval(class_name)(**kwargs)
+            # Create a new instance of the class
+            new_instance = eval(class_name)(**kwargs)
             storage.new(new_instance)
-            print(new_instance.id)
             storage.save()
-        except ValueError:
-            print(ValueError)
-            return
+            print(new_instance.id)
+
+        except Exception as e:
+            print(f"Error: {e}")
 
     def do_show(self, arg):
         """
@@ -134,7 +129,6 @@ class HBNBCommand(cmd.Cmd):
             print("** instance id missing **")
         else:
             objects = storage.all()
-
             key = "{}.{}".format(commands[0], commands[1])
             if key in objects:
                 print(objects[key])
@@ -222,7 +216,6 @@ class HBNBCommand(cmd.Cmd):
             print("** instance id missing **")
         else:
             objects = storage.all()
-
             key = "{}.{}".format(commands[0], commands[1])
             if key not in objects:
                 print("** no instance found **")
@@ -235,64 +228,57 @@ class HBNBCommand(cmd.Cmd):
                 curly_braces = re.search(r"\{(.*?)\}", arg)
 
                 if curly_braces:
-                    # added to catch errors
+                    # Handle dictionary updates
                     try:
                         str_data = curly_braces.group(1)
-
                         arg_dict = ast.literal_eval("{" + str_data + "}")
 
-                        attribute_names = list(arg_dict.keys())
-                        attribute_values = list(arg_dict.values())
-                        # added to catch exception
-                        try:
-                            attr_name1 = attribute_names[0]
-                            attr_value1 = attribute_values[0]
-                            setattr(obj, attr_name1, attr_value1)
-                        except Exception:
-                            pass
-                        try:
-                            # added to catch exception
-                            attr_name2 = attribute_names[1]
-                            attr_value2 = attribute_values[1]
-                            setattr(obj, attr_name2, attr_value2)
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
+                        for attr_name, attr_value in arg_dict.items():
+                            setattr(obj, attr_name, attr_value)
+                        obj.save()
+                    except Exception as e:
+                        print(f"** error updating attributes: {e} **")
                 else:
-
                     attr_name = commands[2]
                     attr_value = commands[3]
 
                     try:
                         attr_value = eval(attr_value)
-                    except Exception:
-                        pass
-                    setattr(obj, attr_name, attr_value)
+                    except (NameError, SyntaxError):
+                        pass  # attr_value remains a string if eval fails
+                    
+                    try:
+                        setattr(obj, attr_name, attr_value)
+                        obj.save()
+                    except Exception as e:
+                        print(f"** error updating attribute: {e} **")
 
-                obj.save()
-    
     def default(self, arg):
         """
         Default behavior for cmd module when input is invalid
         """
         arg_list = arg.split('.')
 
+        if len(arg_list) != 2:
+            print("*** Unknown syntax: {}".format(arg))
+            return
+
         cls_nm = arg_list[0]  # incoming class name
-
         command = arg_list[1].split('(')
-
         cmd_met = command[0]  # incoming command method
 
-        e_arg = command[1].split(')')[0]  # extra arguments
+        if len(command) < 2:
+            e_arg = ""
+        else:
+            e_arg = command[1].split(')')[0]  # extra arguments
 
         method_dict = {
-                'all': self.do_all,
-                'show': self.do_show,
-                'destroy': self.do_destroy,
-                'update': self.do_update,
-                'count': self.do_count
-                }
+            'all': self.do_all,
+            'show': self.do_show,
+            'destroy': self.do_destroy,
+            'update': self.do_update,
+            'count': self.do_count
+        }
 
         if cmd_met in method_dict.keys():
             if cmd_met != "update":
@@ -303,17 +289,14 @@ class HBNBCommand(cmd.Cmd):
                     return
                 try:
                     obj_id, arg_dict = split_curly_braces(e_arg)
-                except Exception:
-                    pass
-                try:
                     call = method_dict[cmd_met]
                     return call("{} {} {}".format(cls_nm, obj_id, arg_dict))
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"** error processing update command: {e} **")
         else:
             print("*** Unknown syntax: {}".format(arg))
             return False
-    
+
 
 if __name__ == '__main__':
     HBNBCommand().cmdloop()
